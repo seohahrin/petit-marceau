@@ -1,0 +1,178 @@
+@import "tailwindcss";
+
+/* Tailwind v4용 커스텀 컬러 테마 */
+@theme {
+  /* stone 팔레트 커스텀 */
+  --color-stone-50: #FDFCFA;
+  --color-stone-100: #F8F6F3;
+  --color-stone-200: #F0EDE8;
+  --color-stone-300: #E5E1DA;
+  --color-stone-400: #D4CFC6;
+
+  /* charcoal 커스텀 */
+  --color-charcoal-900: #1A1A1A;
+  --color-charcoal-800: #2D2D2D;
+  --color-charcoal-700: #3D3D3D;
+  --color-charcoal-600: #525252;
+
+  /* gold 커스텀 (여기 중요 ✨) */
+  --color-gold-muted: #B8A88A;
+  --color-gold-light: #C9BD9F;
+}
+
+
+body {
+  background-color: #FDFCFA;
+  color: #1A1A1A;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 전체 페이지 공통 래퍼 */
+.app-wrapper {
+  min-height: 100vh;        /* 화면 전체 높이 */
+  background-color: #FDFCFA; /* 너가 디자인에 쓴 배경색 */
+  color: #1A1A1A;           /* 기본 글자색 */
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter",
+    "Segoe UI", sans-serif;
+}
+
+/* 부드러운 스크롤 */
+html {
+  scroll-behavior: smooth;
+}
+
+/* 스크롤바 */
+.app-wrapper::-webkit-scrollbar {
+  width: 6px;
+}
+.app-wrapper::-webkit-scrollbar-track {
+  background: #F8F6F3;
+}
+.app-wrapper::-webkit-scrollbar-thumb {
+  background: #D4CFC6;
+  border-radius: 3px;
+}
+.app-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #B8A88A;
+}
+
+/* 네비게이션 링크 밑줄 애니메이션 */
+.nav-link {
+  position: relative;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  font-size: 0.75rem;          /* text-xs 정도 */
+  text-transform: uppercase;
+  letter-spacing: 0.20em;      /* 여기서 네가 원하는 값으로 조절 */
+}
+.nav-link::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background-color: #1A1A1A;
+  transition: width 0.3s ease;
+}
+.nav-link:hover::after {
+  width: 100%;
+}
+
+/* 이미지 컨테이너 호버 효과 */
+.image-container {
+  overflow: hidden;
+}
+.image-container img {
+  transition: transform 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.image-container:hover img {
+  transform: scale(1.03);
+}
+
+/* 버튼 스타일 – Tailwind 유틸과 충돌 안 나게 확실히 고정 */
+
+/* 기본 상태(링크, 방문 링크까지 전부) */
+.btn-primary,
+.btn-primary:link,
+.btn-primary:visited {
+  background-color: #1A1A1A;    /* charcoal-900 */
+  color: #FDFCFA;               /* stone-50 */
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-size: 0.75rem;           /* text-xs 정도 */
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  padding: 0.75rem 2.5rem;      /* 원본보다 살짝 넉넉하게 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  transition: all 0.3s ease;
+  cursor: pointer;
+
+  /* Tailwind가 bg-* 같은 걸 뒤에서 덮어도 우리가 이긴다 */
+  background-image: none;
+}
+
+/* hover 상태 */
+.btn-primary:hover {
+  background-color: #2D2D2D;
+  letter-spacing: 0.28em;
+}
+
+/* secondary 버튼 */
+.btn-secondary,
+.btn-secondary:link,
+.btn-secondary:visited {
+  background-color: transparent;
+  color: #1A1A1A;
+  border: 1px solid rgba(82, 82, 82, 0.3); /* border-charcoal-700/30 느낌 */
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  padding: 0.75rem 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  border-color: #1A1A1A;
+  letter-spacing: 0.28em;
+}
+
+/* ====== FAQ 아코디언 ====== */
+.faq-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease;
+}
+.faq-item.active .faq-content {
+  max-height: 200px;
+}
+.faq-item.active .faq-icon {
+  transform: rotate(45deg);
+}
+.faq-icon {
+  transition: transform 0.3s ease;
+}
+
+/* ====== Divider 애니메이션 (필요하면 사용) ====== */
+.divider-animated {
+  background: linear-gradient(90deg, transparent, #D4CFC6, transparent);
+  background-size: 200% 100%;
+}
+
+/* ====== 모바일 메뉴 슬라이드 ====== */
+.mobile-menu {
+  transform: translateX(100%);
+  transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.mobile-menu.active {
+  transform: translateX(0);
+}

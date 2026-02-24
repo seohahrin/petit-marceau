@@ -1,0 +1,48 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Property {
+  id                 String    @id @default(cuid())
+  name               String
+  slug               String    @unique
+  description        String
+  maxGuests          Int
+  basePricePerNight  Int       // cents, e.g. 12000 = 120.00€
+  cleaningFee        Int       @default(0)
+  city               String?
+  country            String?
+  timezone           String    @default("Europe/Paris")
+
+  bookings           Booking[]
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model Booking {
+  id                    String        @id @default(cuid())
+  propertyId            String
+  property              Property      @relation(fields: [propertyId], references: [id])
+  guestName             String
+  guestEmail            String
+  checkInDate           DateTime
+  checkOutDate          DateTime
+  nights                Int
+  totalAmount           Int           // cents
+  currency              String        @default("EUR")
+  status                String        @default("PENDING")
+  stripePaymentIntentId String?       @unique
+
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([propertyId, checkInDate, checkOutDate])
+}
