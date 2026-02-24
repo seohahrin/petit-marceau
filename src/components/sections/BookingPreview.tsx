@@ -1,6 +1,76 @@
 // src/components/sections/BookingPreview.tsx
+'use client';
+
+import { useState, useRef } from 'react';
+
+type QuoteState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'success'; data: any }
+  | { status: 'error'; message: string };
 
 export default function BookingPreview() {
+  const [checkIn, setCheckIn] = useState('');
+  const [checkOut, setCheckOut] = useState('');
+  const [guests, setGuests] = useState(1);
+  const [quote, setQuote] = useState<QuoteState>({ status: 'idle' });
+
+  const checkInRef = useRef<HTMLInputElement | null>(null);
+  const checkOutRef = useRef<HTMLInputElement | null>(null);
+
+  const canRequestQuote = checkIn && checkOut && guests > 0;
+
+  const today = new Date().toISOString().split('T')[0];
+
+  function openPicker(ref: React.RefObject<HTMLInputElement>) {
+    if (!ref.current) return;
+    // 크롬에서 지원되는 showPicker 사용 (지원 안 되면 focus만)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyInput = ref.current as any;
+    if (typeof anyInput.showPicker === 'function') {
+      anyInput.showPicker();
+    } else {
+      ref.current.focus();
+    }
+  }
+
+  async function handleCheckAvailability() {
+    if (!canRequestQuote) return;
+
+    setQuote({ status: 'loading' });
+
+    try {
+      const res = await fetch('/api/book/quote', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          checkIn,
+          checkOut,
+          guests,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.error || '가격 계산에 실패했습니다.');
+      }
+
+      const data = await res.json();
+      setQuote({ status: 'success', data });
+    } catch (error: any) {
+      setQuote({
+        status: 'error',
+        message: error?.message ?? '알 수 없는 오류가 발생했습니다.',
+      });
+    }
+  }
+
+  // 화면에 보여줄 날짜 텍스트 (YYYY-MM-DD 그대로 두어도 깔끔해서 변환 안 함)
+  const checkInDisplay = checkIn || '';
+  const checkOutDisplay = checkOut || '';
+
   return (
     <section id="booking" className="py-20 lg:py-32 bg-stone-100/50">
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
@@ -32,14 +102,17 @@ export default function BookingPreview() {
                     Check-in
                   </label>
                   <div className="relative">
+                    {/* 기존 디자인 유지: text input + 달력 아이콘 */}
                     <input
                       type="text"
                       placeholder="Select date"
-                      className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors"
+                      value={checkInDisplay}
+                      onClick={() => openPicker(checkInRef)}
                       readOnly
+                      className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors cursor-pointer"
                     />
                     <svg
-                      className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-charcoal-400"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-charcoal-400 pointer-events-none"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -51,6 +124,17 @@ export default function BookingPreview() {
                         d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                       />
                     </svg>
+
+                    {/* 실제 캘린더 input (숨김) */}
+                    <input
+                      ref={checkInRef}
+                      type="date"
+                      min={today}
+                      value={checkIn}
+                      onChange={(e) => setCheckIn(e.target.value)}
+                      className="absolute opacity-0 pointer-events-none"
+                      tabIndex={-1}
+                    />
                   </div>
                 </div>
                 <div>
@@ -61,11 +145,13 @@ export default function BookingPreview() {
                     <input
                       type="text"
                       placeholder="Select date"
-                      className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors"
+                      value={checkOutDisplay}
+                      onClick={() => openPicker(checkOutRef)}
                       readOnly
+                      className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors cursor-pointer"
                     />
                     <svg
-                      className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-charcoal-400"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-charcoal-400 pointer-events-none"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -77,6 +163,16 @@ export default function BookingPreview() {
                         d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                       />
                     </svg>
+
+                    <input
+                      ref={checkOutRef}
+                      type="date"
+                      min={checkIn || today}
+                      value={checkOut}
+                      onChange={(e) => setCheckOut(e.target.value)}
+                      className="absolute opacity-0 pointer-events-none"
+                      tabIndex={-1}
+                    />
                   </div>
                 </div>
               </div>
@@ -86,9 +182,13 @@ export default function BookingPreview() {
                 <label className="block font-sans text-xs tracking-widest uppercase text-charcoal-600 mb-3">
                   Guests
                 </label>
-                <select className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors appearance-none cursor-pointer">
-                  <option>1 Guest</option>
-                  <option>2 Guests</option>
+                <select
+                  value={guests}
+                  onChange={(e) => setGuests(Number(e.target.value))}
+                  className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors appearance-none cursor-pointer"
+                >
+                  <option value={1}>1 Guest</option>
+                  <option value={2}>2 Guests</option>
                 </select>
               </div>
 
@@ -99,7 +199,9 @@ export default function BookingPreview() {
                     Nightly rate
                   </span>
                   <span className="font-sans text-sm text-charcoal-800">
-                    €—
+                    {quote.status === 'success'
+                      ? `€${quote.data.baseNightlyPrice}`
+                      : '€—'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center mb-3">
@@ -107,7 +209,9 @@ export default function BookingPreview() {
                     Cleaning fee
                   </span>
                   <span className="font-sans text-sm text-charcoal-800">
-                    €—
+                    {quote.status === 'success'
+                      ? `€${quote.data.cleaningFee}`
+                      : '€—'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center pt-4 border-t border-stone-200">
@@ -115,15 +219,41 @@ export default function BookingPreview() {
                     Total
                   </span>
                   <span className="font-serif text-2xl text-charcoal-900">
-                    €—
+                    {quote.status === 'success'
+                      ? `€${quote.data.totalAmount}`
+                      : '€—'}
                   </span>
                 </div>
               </div>
 
-              {/* ✅ 여기 버튼 */}
-              <button className="btn-primary w-full">
-                Check Availability
+              {/* 버튼 + 상태 메시지 */}
+              <button
+                className="btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
+                onClick={handleCheckAvailability}
+                disabled={!canRequestQuote || quote.status === 'loading'}
+              >
+                {quote.status === 'loading'
+                  ? 'Calculating...'
+                  : 'Check Availability'}
               </button>
+
+              {quote.status === 'error' && (
+                <p className="mt-3 font-sans text-xs text-red-500">
+                  {quote.message}
+                </p>
+              )}
+
+              {quote.status === 'success' && !quote.data.isValid && (
+                <p className="mt-3 font-sans text-xs text-charcoal-600">
+                  ⚠️ {quote.data.reason}
+                </p>
+              )}
+
+              {quote.status === 'idle' && (
+                <p className="mt-3 font-sans text-xs text-charcoal-500">
+                  Select your dates and number of guests to see the total price.
+                </p>
+              )}
 
               {/* 결제 로고 */}
               <div className="flex items-center justify-center gap-4 mt-6">
