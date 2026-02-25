@@ -1,7 +1,6 @@
 // src/modules/booking/infrastructure/booking-repo.prisma.ts
-
 import { prisma } from '@/shared/libs/prisma';
-import { Booking } from '../domain/booking';
+import { Booking, BookingStatus } from '../domain/booking';
 
 export interface CreateBookingData {
   propertyId: string;
@@ -12,6 +11,7 @@ export interface CreateBookingData {
   nights: number;
   totalAmount: number;
   currency: string;
+  status?: BookingStatus;   // ✅ 추가
 }
 
 export interface BookingRepository {
@@ -30,7 +30,7 @@ export class PrismaBookingRepository implements BookingRepository {
         nights: data.nights,
         totalAmount: data.totalAmount,
         currency: data.currency,
-        status: 'PENDING',
+        status: data.status ?? 'PENDING',   // ✅ 기본값은 여전히 PENDING
       },
     });
 
