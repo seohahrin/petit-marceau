@@ -14,16 +14,17 @@ export default function BookingPreview() {
   const [checkOut, setCheckOut] = useState('');
   const [guests, setGuests] = useState(1);
   const [quote, setQuote] = useState<QuoteState>({ status: 'idle' });
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const checkInRef = useRef<HTMLInputElement | null>(null);
   const checkOutRef = useRef<HTMLInputElement | null>(null);
 
-  const canRequestQuote = checkIn && checkOut && guests > 0;
-
   const today = new Date().toISOString().split('T')[0];
-
-  function openPicker(ref: React.RefObject<HTMLInputElement>) {
+  const canRequestQuote = checkIn && checkOut && guests > 0;
+  
+  function openPicker(ref: { current: HTMLInputElement | null }) {
     if (!ref.current) return;
+  
     // 크롬에서 지원되는 showPicker 사용 (지원 안 되면 focus만)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const anyInput = ref.current as any;
@@ -33,23 +34,14 @@ export default function BookingPreview() {
       ref.current.focus();
     }
   }
-
-  async function handleCheckAvailability() {
-    if (!canRequestQuote) return;
-
+  async function fetchQuote() {
     setQuote({ status: 'loading' });
 
     try {
       const res = await fetch('/api/book/quote', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          checkIn,
-          checkOut,
-          guests,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checkIn, checkOut, guests }),
       });
 
       if (!res.ok) {
@@ -67,7 +59,58 @@ export default function BookingPreview() {
     }
   }
 
-  // 화면에 보여줄 날짜 텍스트 (YYYY-MM-DD 그대로 두어도 깔끔해서 변환 안 함)
+  async function startCheckout() {
+    try {
+      setIsRedirecting(true);
+
+      const res = await fetch('/api/book/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checkIn, checkOut, guests }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.error || '결제 세션 생성에 실패했습니다.');
+      }
+
+      const data = await res.json();
+      if (!data.url) {
+        throw new Error('Stripe Checkout URL이 없습니다.');
+      }
+
+      // Stripe Checkout으로 리다이렉트
+      window.location.href = data.url;
+    } catch (error: any) {
+      setIsRedirecting(false);
+      setQuote({
+        status: 'error',
+        message: error?.message ?? '결제 시작 중 오류가 발생했습니다.',
+      });
+    }
+  }
+
+  async function handlePrimaryAction() {
+    // 날짜/게스트 선택 안 됐으면 아무 것도 안 함
+    if (!canRequestQuote) return;
+
+    // 이미 유효한 견적이 있으면 → 결제 단계로
+    if (quote.status === 'success' && quote.data.isValid) {
+      await startCheckout();
+      return;
+    }
+
+    // 아니면 가격 계산
+    await fetchQuote();
+  }
+
+  const buttonLabel = (() => {
+    if (isRedirecting) return 'Redirecting to payment...';
+    if (quote.status === 'loading') return 'Calculating...';
+    if (quote.status === 'success' && quote.data.isValid) return 'Proceed to payment';
+    return 'Check Availability';
+  })();
+
   const checkInDisplay = checkIn || '';
   const checkOutDisplay = checkOut || '';
 
@@ -102,7 +145,6 @@ export default function BookingPreview() {
                     Check-in
                   </label>
                   <div className="relative">
-                    {/* 기존 디자인 유지: text input + 달력 아이콘 */}
                     <input
                       type="text"
                       placeholder="Select date"
@@ -124,8 +166,6 @@ export default function BookingPreview() {
                         d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                       />
                     </svg>
-
-                    {/* 실제 캘린더 input (숨김) */}
                     <input
                       ref={checkInRef}
                       type="date"
@@ -163,7 +203,6 @@ export default function BookingPreview() {
                         d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                       />
                     </svg>
-
                     <input
                       ref={checkOutRef}
                       type="date"
@@ -229,12 +268,10 @@ export default function BookingPreview() {
               {/* 버튼 + 상태 메시지 */}
               <button
                 className="btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
-                onClick={handleCheckAvailability}
-                disabled={!canRequestQuote || quote.status === 'loading'}
+                onClick={handlePrimaryAction}
+                disabled={!canRequestQuote || quote.status === 'loading' || isRedirecting}
               >
-                {quote.status === 'loading'
-                  ? 'Calculating...'
-                  : 'Check Availability'}
+                {buttonLabel}
               </button>
 
               {quote.status === 'error' && (
@@ -252,6 +289,12 @@ export default function BookingPreview() {
               {quote.status === 'idle' && (
                 <p className="mt-3 font-sans text-xs text-charcoal-500">
                   Select your dates and number of guests to see the total price.
+                </p>
+              )}
+
+              {quote.status === 'success' && quote.data.isValid && (
+                <p className="mt-3 font-sans text-xs text-charcoal-500">
+                  First click calculates the price. Second click takes you to secure Stripe payment.
                 </p>
               )}
 
