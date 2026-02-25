@@ -1,8 +1,8 @@
 // src/app/api/book/checkout/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createCheckoutSession } from '@/modules/payment/application/create-checkout-session';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { checkIn, checkOut, guests } = body ?? {};
@@ -14,10 +14,14 @@ export async function POST(request: Request) {
       );
     }
 
+    // 🔥 여기서 현재 도메인(https://... 포함)을 가져옴
+    const origin = request.nextUrl.origin;
+
     const session = await createCheckoutSession({
       checkIn,
       checkOut,
       guests: Number(guests),
+      origin,
     });
 
     if (!session.url) {

@@ -4,32 +4,41 @@ import { calculatePrice } from '@/modules/pricing/application/calculate-price';
 import { stripe } from '@/modules/payment/infrastructure/stripe-client';
 
 export interface CreateCheckoutSessionInput {
-  checkIn: string;  // '2025-04-10'
-  checkOut: string; // '2025-04-13'
+  checkIn: string;   // '2025-04-10'
+  checkOut: string;  // '2025-04-13'
   guests: number;
+  origin: string;    // 🔥 추가: 현재 도메인 (https://... 포함)
 }
 
 export async function createCheckoutSession(
   input: CreateCheckoutSessionInput
 ): Promise<Stripe.Checkout.Session> {
-  // 1) 가격 계산 (프론트 값 신뢰 X)
+  // 1) 가격 계산
   const quote = await calculatePrice({
     checkIn: input.checkIn,
     checkOut: input.checkOut,
     guests: input.guests,
   });
 
-  // 잘못된 견적이면 바로 에러 (reason 있으면 같이 사용)
   if (!quote.isValid) {
     throw new Error(quote.reason ?? 'Invalid booking request');
   }
 
-  // 2) Stripe 클라이언트가 아예 없는 경우 방어
   if (!stripe) {
     throw new Error('Stripe is not configured. Missing STRIPE_SECRET_KEY.');
   }
 
-  // 3) Checkout 세션 생성
+  // 🔐 origin이 진짜 "절대 URL"인지 한 번 방어 (선택이지만 안전)
+  try {
+    // new URL이 에러 안 나면 유효한 절대 URL
+    // eslint-disable-next-line no-new
+    new URL(input.origin);
+  } catch {
+    throw new Error('Invalid origin URL for Checkout session.');
+  }
+
+  const baseUrl = input.origin;
+
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     currency: 'eur',
@@ -38,8 +47,7 @@ export async function createCheckoutSession(
         quantity: 1,
         price_data: {
           currency: 'eur',
-          // PriceQuote.totalAmount = 유로 단위 → Stripe는 센트 단위
-          unit_amount: Math.round(quote.totalAmount * 100),
+          unit_amount: Math.round(quote.totalAmount * 100), // 유로→센트
           product_data: {
             name: 'Petit Marceau · Stay',
             description: `Stay from ${input.checkIn} to ${input.checkOut} for ${input.guests} guest(s)`,
@@ -52,8 +60,8 @@ export async function createCheckoutSession(
       checkOut: input.checkOut,
       guests: String(input.guests),
     },
-    success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/book/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/#book`,
+    success_url: `${baseUrl}/book/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${baseUrl}/#book`,
   });
 
   return session;
