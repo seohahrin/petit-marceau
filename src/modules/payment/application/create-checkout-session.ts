@@ -12,23 +12,24 @@ export interface CreateCheckoutSessionInput {
 export async function createCheckoutSession(
   input: CreateCheckoutSessionInput
 ): Promise<Stripe.Checkout.Session> {
-  // 1) 가격 계산 (보안상 프론트 값 신뢰 X)
+  // 1) 가격 계산 (프론트 값 신뢰 X)
   const quote = await calculatePrice({
     checkIn: input.checkIn,
     checkOut: input.checkOut,
     guests: input.guests,
   });
 
+  // 잘못된 견적이면 바로 에러 (reason 있으면 같이 사용)
   if (!quote.isValid) {
-    throw new Error('Invalid booking request');
+    throw new Error(quote.reason ?? 'Invalid booking request');
   }
 
-  // 🔴 여기서 stripe가 없으면 바로 막기 (타입도 동시에 좁혀짐)
+  // 2) Stripe 클라이언트가 아예 없는 경우 방어
   if (!stripe) {
     throw new Error('Stripe is not configured. Missing STRIPE_SECRET_KEY.');
   }
 
-  // 2) Checkout 세션 생성
+  // 3) Checkout 세션 생성
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     currency: 'eur',
@@ -36,14 +37,14 @@ export async function createCheckoutSession(
       {
         quantity: 1,
         price_data: {
-            currency: 'eur',
-            // totalAmount = 유로 단위 → Stripe는 센트 단위라 * 100
-            unit_amount: Math.round(quote.totalAmount * 100),
-            product_data: {
-              name: 'Petit Marceau · Stay',
-              description: `Stay from ${input.checkIn} to ${input.checkOut} for ${input.guests} guest(s)`,
-            },
+          currency: 'eur',
+          // PriceQuote.totalAmount = 유로 단위 → Stripe는 센트 단위
+          unit_amount: Math.round(quote.totalAmount * 100),
+          product_data: {
+            name: 'Petit Marceau · Stay',
+            description: `Stay from ${input.checkIn} to ${input.checkOut} for ${input.guests} guest(s)`,
           },
+        },
       },
     ],
     metadata: {
