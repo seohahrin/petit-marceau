@@ -44,9 +44,11 @@ export async function createCheckoutSession(
   // 💶 DB에 그대로 넣을 수 있도록 cents 단위로 미리 계산
   const totalAmountCents = Math.round(quote.totalAmount * 100);
 
-  const session = await stripe.checkout.sessions.create({
+  // ✅ Stripe 타입에 맞게 명시적으로 파라미터 타입 지정
+  const params: Stripe.Checkout.SessionCreateParams = {
     mode: 'payment',
-    currency: 'eur',
+    ui_mode: 'hosted',
+
     line_items: [
       {
         quantity: 1,
@@ -60,6 +62,7 @@ export async function createCheckoutSession(
         },
       },
     ],
+
     // 🔥 Webhook에서 Booking 생성에 사용할 정보들
     metadata: {
       checkInDate: input.checkIn,
@@ -67,14 +70,15 @@ export async function createCheckoutSession(
       guests: String(input.guests),
       guestName: input.guestName,
       guestEmail: input.guestEmail,
-      // calculatePrice 쪽에 nights가 있다면 그대로 쓰고,
-      // 없다면 Webhook 쪽에서 날짜 차이로 다시 계산해도 OK
-      nights: quote.nights != null ? String(quote.nights) : undefined,
+      nights: String(quote.nights),
       totalAmountCents: String(totalAmountCents),
     },
+
     success_url: `${baseUrl}/book/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${baseUrl}/#book`,
-  });
+  };
+
+  const session = await stripe.checkout.sessions.create(params);
 
   return session;
 }
