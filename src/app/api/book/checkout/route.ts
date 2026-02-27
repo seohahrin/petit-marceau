@@ -1,11 +1,17 @@
 // src/app/api/book/checkout/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createCheckoutSession } from '@/modules/payment/application/create-checkout-session';
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { checkIn, checkOut, guests } = body ?? {};
+    const {
+      checkIn,
+      checkOut,
+      guests,
+      guestName,
+      guestEmail,
+    } = body ?? {};
 
     if (!checkIn || !checkOut || !guests) {
       return NextResponse.json(
@@ -14,14 +20,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 🔥 여기서 현재 도메인(https://... 포함)을 가져옴
-    const origin = request.nextUrl.origin;
+    if (!guestName || !guestEmail) {
+      return NextResponse.json(
+        { error: 'guestName, guestEmail은 필수입니다.' },
+        { status: 400 }
+      );
+    }
+
+    // origin: 브라우저/도메인 기준 절대 URL
+    const url = new URL(request.url);
+    const origin =
+      process.env.NEXT_PUBLIC_APP_URL ?? `${url.protocol}//${url.host}`;
 
     const session = await createCheckoutSession({
       checkIn,
       checkOut,
       guests: Number(guests),
       origin,
+      guestName,
+      guestEmail,
     });
 
     if (!session.url) {
@@ -35,7 +52,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('[API] /api/book/checkout error', error);
     return NextResponse.json(
-      { error: error?.message ?? '결제 세션 생성 중 오류가 발생했습니다.' },
+      { error: 'Internal Server Error' },
       { status: 500 }
     );
   }
