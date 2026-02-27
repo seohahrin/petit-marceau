@@ -9,6 +9,9 @@ type QuoteState =
   | { status: 'success'; data: any }
   | { status: 'error'; message: string };
 
+// 아주 기본적인 이메일 패턴
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function BookingPreview() {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
@@ -16,8 +19,9 @@ export default function BookingPreview() {
   const [quote, setQuote] = useState<QuoteState>({ status: 'idle' });
   const [isRedirecting, setIsRedirecting] = useState(false);
 
-  // 예약자 정보
-  const [guestName, setGuestName] = useState('');
+  // 예약자 정보 (first / last 분리)
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -31,17 +35,18 @@ export default function BookingPreview() {
   const isQuoteValid =
     quote.status === 'success' && quote.data?.isValid === true;
 
+  // 이름/이메일 유효성 체크
+  const isNameValid =
+    firstName.trim().length > 1 && lastName.trim().length > 1;
+  const isEmailValid = EMAIL_REGEX.test(guestEmail.trim());
+
   const canProceedToPayment =
-    isQuoteValid &&
-    guestName.trim().length > 1 &&
-    guestEmail.trim().length > 3 &&
-    !isRedirecting;
+    isQuoteValid && isNameValid && isEmailValid && !isRedirecting;
 
   function resetQuoteFlow() {
     setQuote({ status: 'idle' });
     setFormError(null);
-    // 날짜/게스트 바뀌면 이전 이름/메일은 그대로 둬도 되고, 초기화해도 됨
-    // 여기서는 그대로 두는 쪽이 UX상 덜 답답해서 남겨둘게
+    // 날짜/게스트 변경 시 이름/메일은 그대로 두는 UX 유지
   }
 
   function openPicker(ref: { current: HTMLInputElement | null }) {
@@ -82,7 +87,25 @@ export default function BookingPreview() {
   }
 
   async function startCheckout() {
-    if (!canProceedToPayment) return;
+    // quote 가 유효하지 않으면 그냥 리턴
+    if (!isQuoteValid) return;
+
+    // 이름 / 이메일 최종 검사 (여기서 한 번 더 강하게 막기)
+    const trimmedFirst = firstName.trim();
+    const trimmedLast = lastName.trim();
+    const trimmedEmail = guestEmail.trim();
+
+    const nameOk = trimmedFirst.length > 1 && trimmedLast.length > 1;
+    const emailOk = EMAIL_REGEX.test(trimmedEmail);
+
+    if (!nameOk || !emailOk) {
+      setFormError(
+        'Please enter your first name, last name, and a valid email address to continue.'
+      );
+      return;
+    }
+
+    const fullName = `${trimmedFirst} ${trimmedLast}`;
 
     try {
       setIsRedirecting(true);
@@ -95,8 +118,8 @@ export default function BookingPreview() {
           checkIn,
           checkOut,
           guests,
-          guestName,
-          guestEmail,
+          guestName: fullName,
+          guestEmail: trimmedEmail,
         }),
       });
 
@@ -121,13 +144,13 @@ export default function BookingPreview() {
   async function handlePrimaryAction() {
     if (!canRequestQuote) return;
 
-    // 이미 유효한 견적이 있고 → 두 번째 클릭이면 바로 결제 단계로
+    // 이미 유효한 견적이 있고 → 두 번째 단계라면 결제 시도
     if (isQuoteValid) {
       await startCheckout();
       return;
     }
 
-    // 첫 번째 클릭 → 가격&가용 여부 확인
+    // 첫 번째 클릭 → 가격 & 가용 여부 확인
     await fetchQuote();
   }
 
@@ -137,6 +160,17 @@ export default function BookingPreview() {
     if (!canRequestQuote) return 'Select dates to check';
     if (isQuoteValid) return 'Proceed to payment';
     return 'Check Availability';
+  })();
+
+  const buttonDisabled = (() => {
+    if (!canRequestQuote || quote.status === 'loading' || isRedirecting) {
+      return true;
+    }
+    // 2단계(결제 단계)에서는 이름/이메일이 유효하지 않으면 버튼 비활성화
+    if (isQuoteValid) {
+      return !canProceedToPayment;
+    }
+    return false;
   })();
 
   const checkInDisplay = checkIn || '';
@@ -305,18 +339,32 @@ export default function BookingPreview() {
 
               {/* 견적 유효 시 → 이름/메일 폼 노출 */}
               {isQuoteValid && (
-                <div className="mb-6 grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block font-sans text-xs tracking-widest uppercase text-charcoal-600 mb-2">
-                      Full name
-                    </label>
-                    <input
-                      type="text"
-                      value={guestName}
-                      onChange={(e) => setGuestName(e.target.value)}
-                      placeholder="Name for the reservation"
-                      className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors"
-                    />
+                <div className="mb-6 space-y-4">
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-sans text-xs tracking-widest uppercase text-charcoal-600 mb-2">
+                        First name
+                      </label>
+                      <input
+                        type="text"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="Given name"
+                        className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-sans text-xs tracking-widest uppercase text-charcoal-600 mb-2">
+                        Last name
+                      </label>
+                      <input
+                        type="text"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="Family name"
+                        className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block font-sans text-xs tracking-widest uppercase text-charcoal-600 mb-2">
@@ -329,6 +377,11 @@ export default function BookingPreview() {
                       placeholder="Confirmation will be sent here"
                       className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors"
                     />
+                    {!isEmailValid && guestEmail.trim().length > 0 && (
+                      <p className="mt-1 font-sans text-[11px] text-red-500">
+                        Please enter a valid email address.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -337,7 +390,7 @@ export default function BookingPreview() {
               <button
                 className="btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
                 onClick={handlePrimaryAction}
-                disabled={!canRequestQuote || quote.status === 'loading' || isRedirecting}
+                disabled={buttonDisabled}
               >
                 {buttonLabel}
               </button>
@@ -370,8 +423,8 @@ export default function BookingPreview() {
 
               {isQuoteValid && (
                 <p className="mt-3 font-sans text-xs text-charcoal-500">
-                  First click checks availability. Second click continues to
-                  secure Stripe payment with your details.
+                  First click checks availability. Then enter your details to
+                  proceed to secure Stripe payment.
                 </p>
               )}
 
