@@ -9,8 +9,6 @@ type QuoteState =
   | { status: 'success'; data: any }
   | { status: 'error'; message: string };
 
-type Step = 'select' | 'details';
-
 export default function BookingPreview() {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
@@ -18,10 +16,10 @@ export default function BookingPreview() {
   const [quote, setQuote] = useState<QuoteState>({ status: 'idle' });
   const [isRedirecting, setIsRedirecting] = useState(false);
 
-  // 신규: 예약자 정보 + 단계
-  const [step, setStep] = useState<Step>('select');
+  // 예약자 정보
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
 
   const checkInRef = useRef<HTMLInputElement | null>(null);
   const checkOutRef = useRef<HTMLInputElement | null>(null);
@@ -29,23 +27,25 @@ export default function BookingPreview() {
   const today = new Date().toISOString().split('T')[0];
   const canRequestQuote = checkIn && checkOut && guests > 0;
 
-  const canConfirmBooking =
-    step === 'details' &&
-    quote.status === 'success' &&
-    quote.data?.isValid &&
+  // 견적이 유효하고, 두 번째 단계(결제 준비)인지 여부
+  const isQuoteValid =
+    quote.status === 'success' && quote.data?.isValid === true;
+
+  const canProceedToPayment =
+    isQuoteValid &&
     guestName.trim().length > 1 &&
     guestEmail.trim().length > 3 &&
     !isRedirecting;
 
   function resetQuoteFlow() {
     setQuote({ status: 'idle' });
-    setStep('select');
+    setFormError(null);
+    // 날짜/게스트 바뀌면 이전 이름/메일은 그대로 둬도 되고, 초기화해도 됨
+    // 여기서는 그대로 두는 쪽이 UX상 덜 답답해서 남겨둘게
   }
 
   function openPicker(ref: { current: HTMLInputElement | null }) {
     if (!ref.current) return;
-
-    // 크롬에서 지원되는 showPicker 사용 (지원 안 되면 focus만)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const anyInput = ref.current as any;
     if (typeof anyInput.showPicker === 'function') {
@@ -57,6 +57,7 @@ export default function BookingPreview() {
 
   async function fetchQuote() {
     setQuote({ status: 'loading' });
+    setFormError(null);
 
     try {
       const res = await fetch('/api/book/quote', {
@@ -72,25 +73,20 @@ export default function BookingPreview() {
 
       const data = await res.json();
       setQuote({ status: 'success', data });
-
-      // 가용하고 유효한 경우 → 다음 단계(예약자 정보)로
-      if (data.isValid) {
-        setStep('details');
-      }
     } catch (error: any) {
       setQuote({
         status: 'error',
         message: error?.message ?? '알 수 없는 오류가 발생했습니다.',
       });
-      setStep('select');
     }
   }
 
   async function startCheckout() {
-    if (!canConfirmBooking) return;
+    if (!canProceedToPayment) return;
 
     try {
       setIsRedirecting(true);
+      setFormError(null);
 
       const res = await fetch('/api/book/checkout', {
         method: 'POST',
@@ -118,24 +114,28 @@ export default function BookingPreview() {
       window.location.href = data.url;
     } catch (error: any) {
       setIsRedirecting(false);
-      setQuote({
-        status: 'error',
-        message: error?.message ?? '결제 시작 중 오류가 발생했습니다.',
-      });
+      setFormError(error?.message ?? '결제 시작 중 오류가 발생했습니다.');
     }
   }
 
   async function handlePrimaryAction() {
-    // 날짜/게스트 선택 안 됐으면 아무 것도 안 함
     if (!canRequestQuote) return;
 
-    // 1단계에서는 "가용 여부 + 가격 계산"만
+    // 이미 유효한 견적이 있고 → 두 번째 클릭이면 바로 결제 단계로
+    if (isQuoteValid) {
+      await startCheckout();
+      return;
+    }
+
+    // 첫 번째 클릭 → 가격&가용 여부 확인
     await fetchQuote();
   }
 
   const buttonLabel = (() => {
+    if (isRedirecting) return 'Redirecting to payment...';
     if (quote.status === 'loading') return 'Checking availability...';
     if (!canRequestQuote) return 'Select dates to check';
+    if (isQuoteValid) return 'Proceed to payment';
     return 'Check Availability';
   })();
 
@@ -159,8 +159,8 @@ export default function BookingPreview() {
             </p>
             <p className="font-sans text-sm text-charcoal-600 leading-relaxed">
               First check availability and total price for your dates. If the
-              stay is available, you&apos;ll be able to enter your details and
-              complete payment via secure Stripe checkout.
+              stay is available, you can enter your details and continue to
+              secure Stripe payment.
             </p>
           </div>
 
@@ -303,59 +303,53 @@ export default function BookingPreview() {
                 </div>
               </div>
 
-              {/* 1단계: Check Availability 버튼 */}
-              {step === 'select' && (
-                <button
-                  className="btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
-                  onClick={handlePrimaryAction}
-                  disabled={!canRequestQuote || quote.status === 'loading'}
-                >
-                  {buttonLabel}
-                </button>
-              )}
-
-              {/* 2단계: 예약자 정보 + Confirm & pay */}
-              {step === 'details' && quote.status === 'success' && quote.data.isValid && (
-                <div className="mt-4 space-y-4">
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block font-sans text-xs tracking-widest uppercase text-charcoal-600 mb-2">
-                        Full name
-                      </label>
-                      <input
-                        type="text"
-                        value={guestName}
-                        onChange={(e) => setGuestName(e.target.value)}
-                        placeholder="Name for the reservation"
-                        className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-sans text-xs tracking-widest uppercase text-charcoal-600 mb-2">
-                        Email
-                      </label>
-                      <input
-                        type="email"
-                        value={guestEmail}
-                        onChange={(e) => setGuestEmail(e.target.value)}
-                        placeholder="Confirmation will be sent here"
-                        className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors"
-                      />
-                    </div>
+              {/* 견적 유효 시 → 이름/메일 폼 노출 */}
+              {isQuoteValid && (
+                <div className="mb-6 grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-sans text-xs tracking-widest uppercase text-charcoal-600 mb-2">
+                      Full name
+                    </label>
+                    <input
+                      type="text"
+                      value={guestName}
+                      onChange={(e) => setGuestName(e.target.value)}
+                      placeholder="Name for the reservation"
+                      className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors"
+                    />
                   </div>
-
-                  <button
-                    className="btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
-                    onClick={startCheckout}
-                    disabled={!canConfirmBooking}
-                  >
-                    {isRedirecting ? 'Redirecting to payment...' : 'Confirm & pay'}
-                  </button>
+                  <div>
+                    <label className="block font-sans text-xs tracking-widest uppercase text-charcoal-600 mb-2">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      value={guestEmail}
+                      onChange={(e) => setGuestEmail(e.target.value)}
+                      placeholder="Confirmation will be sent here"
+                      className="w-full px-4 py-3 bg-white border border-stone-300 font-sans text-sm text-charcoal-800 focus:outline-none focus:border-charcoal-600 transition-colors"
+                    />
+                  </div>
                 </div>
               )}
 
+              {/* 메인 버튼: 한 개만, 텍스트만 바뀜 */}
+              <button
+                className="btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
+                onClick={handlePrimaryAction}
+                disabled={!canRequestQuote || quote.status === 'loading' || isRedirecting}
+              >
+                {buttonLabel}
+              </button>
+
               {/* 상태 메시지 */}
-              {quote.status === 'error' && (
+              {formError && (
+                <p className="mt-3 font-sans text-xs text-red-500">
+                  {formError}
+                </p>
+              )}
+
+              {quote.status === 'error' && !formError && (
                 <p className="mt-3 font-sans text-xs text-red-500">
                   {quote.message}
                 </p>
@@ -374,14 +368,12 @@ export default function BookingPreview() {
                 </p>
               )}
 
-              {step === 'details' &&
-                quote.status === 'success' &&
-                quote.data.isValid && (
-                  <p className="mt-3 font-sans text-xs text-charcoal-500">
-                    Step 2: Enter your details and confirm to be redirected to secure
-                    Stripe payment.
-                  </p>
-                )}
+              {isQuoteValid && (
+                <p className="mt-3 font-sans text-xs text-charcoal-500">
+                  First click checks availability. Second click continues to
+                  secure Stripe payment with your details.
+                </p>
+              )}
 
               {/* 결제 로고 */}
               <div className="flex items-center justify-center gap-4 mt-6">
