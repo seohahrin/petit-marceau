@@ -21,7 +21,7 @@ export interface PriceQuote {
 
 const BASE_NIGHTLY_PRICE = 220; // €220 / night
 const CLEANING_FEE = 60;        // €60 / stay
-const MIN_NIGHTS = 2;
+const MIN_NIGHTS = 1;           // ✅ 최소 1박
 
 function diffInNights(checkIn: Date, checkOut: Date): number {
   const msPerDay = 1000 * 60 * 60 * 24;
@@ -60,21 +60,7 @@ export function calculateQuote(input: PriceQuoteInput): PriceQuote {
     };
   }
 
-  if (nights < MIN_NIGHTS) {
-    const total = nights * BASE_NIGHTLY_PRICE + CLEANING_FEE;
-
-    return {
-      nights,
-      baseNightlyPrice: BASE_NIGHTLY_PRICE,
-      cleaningFee: CLEANING_FEE,
-      totalAmount: total,
-      currency: 'EUR',
-      minNights: MIN_NIGHTS,
-      isValid: false,
-      reason: `최소 ${MIN_NIGHTS}박 이상부터 예약 가능합니다.`,
-    };
-  }
-
+  // ✅ 최소 1박이므로, 1박 이상이면 전부 유효
   const totalAmount = nights * BASE_NIGHTLY_PRICE + CLEANING_FEE;
 
   return {
